@@ -45,3 +45,18 @@ def compute_dot_product(vec_a: Sequence[float], vec_b: Sequence[float]) -> float
     passed, violations = verify_code(code, "compute_dot_product", 2)
     assert passed
     assert len(violations) == 0
+
+
+def test_verify_code_relative_import():
+    code = "from . import os\ndef compute(x): return x"
+    passed, violations = verify_code(code, "compute", 1)
+    assert not passed
+    assert any("Prohibited import" in v for v in violations)
+
+
+def test_verify_code_posonlyargs():
+    code = "def compute_dot_product(vec_a, vec_b, /): return vec_a"
+    passed, violations = verify_code(code, "compute_dot_product", 2)
+    assert passed
+    assert len(violations) == 0
+

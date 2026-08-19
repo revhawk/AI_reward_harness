@@ -4,7 +4,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Build Status](https://img.shields.io/badge/tests-passing-brightgreen.svg)](tests/)
 
-An automated code evaluation, static AST security verification, and scalar reward generation engine for Reinforcement Learning (RL) and AI agent evaluation.
+An automated code evaluation, static AST security verification, advanced execution metrics, and scalar reward generation engine for Reinforcement Learning (RL) and AI agent evaluation.
 
 ---
 
@@ -12,6 +12,8 @@ An automated code evaluation, static AST security verification, and scalar rewar
 
 - **Tiered Evaluation Pipeline**: Evaluates candidate Python code across static syntax/AST checks and dynamic execution assertions.
 - **Static AST Security Verification**: Enforces module import whitelists (e.g. blocking `os`, `subprocess`, `sys`), blocks unsafe built-ins (`eval`, `exec`, `__import__`), and validates target function parameter signatures.
+- **Advanced Code Metrics**: Measures Cyclomatic Complexity ($V(G)$), Lines of Code (LOC), execution wall-clock latency (`exec_time_ms`), and assertion pass rate (`pass_rate`).
+- **Batch Evaluation Aggregator**: Computes benchmark-wide summary metrics (`pass@1`, `mean_reward`, `mean_exec_time_ms`, `mean_complexity`).
 - **Subprocess Execution Sandboxing**: Executes candidate code in isolated subprocesses with timeout enforcement to protect host environments.
 - **Shaped Scalar Reward Signal**: Computes a scalar reward $R \in [-1.0, 1.0]$ with partial credit for fractional assertion passes and step penalties for multi-turn optimization.
 - **Agent Trajectory State Machine**: Simulates agent environment steps, tool dispatching (`run_python`), and terminal state tracking (`SUCCESS`, `MAX_STEPS_EXCEEDED`).
@@ -22,7 +24,7 @@ An automated code evaluation, static AST security verification, and scalar rewar
 
 ```mermaid
 graph TD
-    Code[Candidate Code Submission] --> Tier1[Tier 1: Static AST Verification]
+    Code[Candidate Code Submission] --> Tier1[Tier 1: Static AST Verification & Complexity]
     Tier1 -->|Syntax Error / Forbidden Import / Invalid Signature| R1[Reward: -1.0]
     Tier1 -->|AST Passed| Tier2[Tier 2: Subprocess Execution & Unit Tests]
     Tier2 -->|All Assertions Passed| R2[Reward: 1.0 - Step Penalty]
@@ -62,9 +64,9 @@ pip install pytest
 
 ## 🚀 Usage Guide
 
-### 1. Code Reward Engine (`reward_harness.py`)
+### 1. Single Code Reward & Metrics Evaluation (`reward_harness.py`)
 
-Evaluate candidate code against required functions and unit test assertions to compute scalar rewards for RL agents:
+Evaluate candidate code against required functions and unit test assertions to compute scalar rewards and performance metrics:
 
 ```python
 from reward_harness import CodeRewardEngine
@@ -87,12 +89,37 @@ result = engine.compute_reward(
     step_idx=1
 )
 
-print(f"Reward: {result.reward}")          # Output: 1.0
-print(f"Passed: {result.tests_passed}/{result.total_tests}") # Output: 3/3
-print(f"Feedback: {result.feedback}")      # Output: All tests passed successfully.
+print(f"Reward: {result.reward}")              # Output: 1.0
+print(f"Pass Rate: {result.pass_rate * 100}%")  # Output: 100.0%
+print(f"Complexity V(G): {result.complexity}") # Output: 1
+print(f"LOC: {result.loc}")                    # Output: 2
+print(f"Execution Latency: {result.exec_time_ms} ms")
 ```
 
-### 2. Static AST Policy Verification (`ast_drill.py`)
+### 2. Batch Evaluation & Benchmark Summary (`evaluate_batch`)
+
+Evaluate multiple candidate solutions in batch and compute aggregate benchmark statistics:
+
+```python
+candidates = [
+    "import os\ndef clamp(v, l, h): return v",                # Invalid import
+    "def clamp(v, l, h):\n    return max(v, l)",               # Partial pass
+    "def clamp(v, l, h):\n    return max(l, min(v, h))"        # Full pass
+]
+
+results, summary = engine.evaluate_batch(
+    candidates=candidates,
+    required_func="clamp",
+    unit_tests=["clamp(5, 0, 10) == 5", "clamp(-2, 0, 10) == 0"]
+)
+
+print(f"Pass@1: {summary.pass_at_1 * 100}%")
+print(f"Mean Reward: {summary.mean_reward}")
+print(f"Mean Latency: {summary.mean_exec_time_ms} ms")
+print(f"Mean Complexity: {summary.mean_complexity}")
+```
+
+### 3. Static AST Policy Verification (`ast_drill.py`)
 
 Statically inspect Python AST to enforce security policies and parameter counts without executing untrusted code:
 
@@ -116,39 +143,19 @@ print(f"Valid: {is_valid}")
 # Violations: ['Line 2: Prohibited import \'os\'.']
 ```
 
-### 3. Agent Environment Trajectory Simulation (`main.py`)
-
-Simulate multi-step agent environments with tool dispatching and step limit boundaries:
-
-```python
-from main import AgentState, step
-
-state = AgentState(task_goal="Compute 10th Fibonacci number", max_steps=4)
-
-# Apply tool call step
-action = {
-    "action_type": "CALL_TOOL",
-    "tool_name": "run_python",
-    "tool_input": {
-        "code": "def fib(n):\n    a, b = 0, 1\n    for _ in range(n): a, b = b, a + b\n    return a\nprint(fib(10))"
-    }
-}
-
-state = step(state, action)
-print(f"Status: {state.status.value}") # Output: RUNNING
-print(f"Output: {state.trajectory[-1].tool_output['stdout']}") # Output: 55
-```
-
 ---
 
-## 📊 Reward Formulation Matrix
+## 📊 Evaluation Metrics Reference
 
-| Evaluation Outcome | AST Pass | Runtime Pass | Test Pass Ratio | Reward $R$ Formula | Reward Range |
-| :--- | :---: | :---: | :---: | :--- | :---: |
-| **Syntax Error / Prohibited Import** | ❌ | ❌ | $0.0$ | $R = -1.0$ | $-1.0$ |
-| **Runtime Error / 0 Tests Passed** | ✅ | ❌ | $0.0$ | $R = 0.0$ | $0.0$ |
-| **Partial Test Pass ($k/N$)** | ✅ | ✅ | $k/N$ | $R = 0.5 \times (k / N)$ | $[0.0, 0.5)$ |
-| **Full Pass ($N/N$)** | ✅ | ✅ | $1.0$ | $R = 1.0 - \max(0, (step - 1) \times 0.05)$ | $[0.5, 1.0]$ |
+| Metric Name | Type | Description | Source |
+| :--- | :--- | :--- | :--- |
+| `reward` | `float` | Shaped scalar reward $R \in [-1.0, 1.0]$ | `reward_harness.py` |
+| `pass_rate` | `float` | Ratio of unit tests passed ($0.0 \rightarrow 1.0$) | `reward_harness.py` |
+| `complexity` | `int` | Cyclomatic Complexity $V(G)$ | AST static analysis |
+| `loc` | `int` | Lines of non-empty, non-comment code | Static line analysis |
+| `exec_time_ms` | `float` | Execution wall-clock time in milliseconds | Subprocess timing |
+| `pass_at_1` | `float` | Batch success rate on first attempt | `evaluate_batch()` |
+| `mean_reward` | `float` | Average scalar reward across batch | `evaluate_batch()` |
 
 ---
 

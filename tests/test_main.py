@@ -64,3 +64,16 @@ def test_agent_max_steps_exceeded():
 
     state = step(state, step_action)
     assert state.status == AgentStatus.MAX_STEPS_EXCEEDED
+
+
+def test_agent_step_with_none_tool_input():
+    state = AgentState(task_goal="None input test")
+    action = {
+        "action_type": "CALL_TOOL",
+        "tool_name": "run_python",
+        "tool_input": None,
+    }
+    state = step(state, action)
+    assert state.current_step == 1
+    assert state.trajectory[-1].tool_input == {}
+

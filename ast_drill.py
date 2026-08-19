@@ -17,6 +17,16 @@ class CodePolicyVerifier(ast.NodeVisitor):
 
         self.violations: list[str] = []
         self.found_required_func = False
+        self.node_count = 0
+        self.complexity = 1
+
+    def generic_visit(self, node: ast.AST) -> Any:
+        self.node_count += 1
+        if isinstance(node, (ast.If, ast.For, ast.While, ast.ExceptHandler, ast.With, ast.Assert, ast.IfExp)):
+            self.complexity += 1
+        elif isinstance(node, ast.BoolOp):
+            self.complexity += len(node.values) - 1
+        super().generic_visit(node)
 
     def visit_Import(self, node: ast.Import) -> Any:
         """Inspects top-level imports like 'import os'."""
@@ -28,10 +38,12 @@ class CodePolicyVerifier(ast.NodeVisitor):
         self.generic_visit(node)
 
     def visit_ImportFrom(self, node: ast.ImportFrom) -> Any:
-        """Inspects from-imports like 'from os import system'."""
-        if node.module and node.module not in self.allowed_imports:
+        """Inspects from-imports like 'from os import system' or relative imports."""
+        module_name = node.module.split(".")[0] if node.module else None
+        if module_name is None or module_name not in self.allowed_imports:
+            mod_desc = f"module '{node.module}'" if node.module else "relative path"
             self.violations.append(
-                f"Line {node.lineno}: Prohibited import from module '{node.module}'."
+                f"Line {node.lineno}: Prohibited import from {mod_desc}."
             )
         self.generic_visit(node)
 
@@ -51,7 +63,7 @@ class CodePolicyVerifier(ast.NodeVisitor):
         """Verifies target function presence and parameter count."""
         if node.name == self.required_func:
             self.found_required_func = True
-            param_count = len(node.args.args)
+            param_count = len(node.args.args) + len(node.args.posonlyargs)
             if param_count != self.expected_args:
                 self.violations.append(
                     f"Line {node.lineno}: Function '{self.required_func}' expects {self.expected_args} "

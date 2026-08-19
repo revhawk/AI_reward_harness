@@ -67,7 +67,7 @@ class AgentState:
 
 # 3. Tool Registry & Step Function
 TOOL_REGISTRY = {
-    "run_python": lambda kwargs: execute_python_code(kwargs.get("code", ""))
+    "run_python": lambda kwargs: execute_python_code((kwargs or {}).get("code", ""))
 }
 
 
@@ -77,9 +77,9 @@ def step(state: AgentState, action_decision: dict[str, Any]) -> AgentState:
         return state
 
     state.current_step += 1
-    tool_name = action_decision.get("tool_name", "")
-    tool_input = action_decision.get("tool_input", {})
-    action_type = action_decision.get("action_type", "CALL_TOOL")
+    tool_name = action_decision.get("tool_name") or ""
+    tool_input = action_decision.get("tool_input") or {}
+    action_type = action_decision.get("action_type") or "CALL_TOOL"
 
     # Handle Final Answer
     if action_type == "FINISH":
