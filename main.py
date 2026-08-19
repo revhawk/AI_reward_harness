@@ -11,6 +11,7 @@ def execute_python_code(code: str, timeout_seconds: int = 5) -> dict[str, Any]:
     try:
         result = subprocess.run(
             [sys.executable, "-"],
+            input=code,
             capture_output=True,
             text=True,
             timeout=timeout_seconds,
